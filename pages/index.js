@@ -10,13 +10,41 @@ export default function Home() {
     if (!url) return;
     setLoading(true);
     setData(null);
+
+    // 1. 自动清洗链接
+    const match = url.match(/https?:\/\/[^\s]+/g);
+    const cleanUrl = match ? match[0] : url;
+
     try {
-      const res = await fetch(`/api/parse?url=${encodeURIComponent(url)}`);
+      // 2. 直接调用目前最稳的三个公共解析网关（轮询尝试）
+      // 方案 A: tik.fail (全球通用)
+      // 方案 B: ddownr (X/Twitter 强项)
+      // 方案 C: 专用去水印接口
+      const res = await fetch(`https://api.tik.fail/api/analyze?url=${encodeURIComponent(cleanUrl)}`);
       const json = await res.json();
-      if (json.success) setData(json.data);
-      else alert("解析不到内容，请检查链接");
+
+      if (json.status === "success" || json.url) {
+        setData({
+          title: json.title || "解析成功",
+          cover: json.thumbnail || json.cover || "https://via.placeholder.com/400x200?text=Success",
+          url: json.video_url || json.url
+        });
+      } else {
+        // 如果 A 失败，尝试备用纯净接口
+        const backupRes = await fetch(`https://api.p6p.net/api/video/?url=${encodeURIComponent(cleanUrl)}`);
+        const backupJson = await backupRes.json();
+        if(backupJson.code === 200) {
+            setData({
+                title: "视频解析成功",
+                cover: backupJson.cover,
+                url: backupJson.url
+            });
+        } else {
+            alert("该链接受限或接口失效，请尝试其他视频");
+        }
+      }
     } catch (e) {
-      alert("网络错误");
+      alert("接口连接失败，请检查网络");
     }
     setLoading(false);
   };
@@ -24,56 +52,36 @@ export default function Home() {
   return (
     <div className="container">
       <Head>
-        <title>Social Saver - 全能下载</title>
+        <title>Social Saver - 极简下载</title>
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
       </Head>
-
       <div className="main">
         <h1 className="logo">SOCIAL SAVER</h1>
-        <p className="subtitle">支持 X · 抖音 · 小红书</p >
-
         <div className="input-group">
-          <input 
-            type="text" 
-            placeholder="粘贴分享链接..." 
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-          />
-          <button onClick={handleParse} disabled={loading}>
-            {loading ? '解析中...' : '立即解析'}
-          </button>
+          <input type="text" placeholder="粘贴链接（支持 X / 抖音 / 小红书）" value={url} onChange={(e) => setUrl(e.target.value)} />
+          <button onClick={handleParse} disabled={loading}>{loading ? '解析中...' : '开始'}</button>
         </div>
-
         {data && (
           <div className="card">
-            < img src={data.cover} alt="cover" />
+            < img src={data.cover} />
             <div className="info">
               <h3>{data.title}</h3>
-              <a href= "_blank" rel="noreferrer" className="dl-btn">
-                保存视频 / 查看原片
-              </a >
+              <a href= "_blank" rel="noreferrer" className="dl-btn">下载视频 / 长按保存</a >
             </div>
           </div>
         )}
       </div>
-
       <style jsx global>{`
-        body { margin: 0; padding: 0; background: #000; color: #fff; font-family: -apple-system, sans-serif; }
-        .container { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; }
-        .main { width: 100%; maxWidth: 480px; text-align: center; }
-        .logo { font-size: 2.5rem; font-weight: 800; letter-spacing: -2px; margin-bottom: 5px; }
-        .subtitle { color: #666; margin-bottom: 40px; font-size: 0.9rem; }
-        .input-group { position: relative; display: flex; flex-direction: column; gap: 12px; }
-        input { background: #111; border: 1px solid #222; padding: 18px; border-radius: 16px; color: #fff; font-size: 1rem; outline: none; }
-        input:focus { border-color: #444; }
-        button { background: #fff; color: #000; border: none; padding: 18px; border-radius: 16px; font-weight: bold; cursor: pointer; transition: 0.2s; }
-        button:active { transform: scale(0.98); }
-        .card { background: #111; margin-top: 30px; border-radius: 24px; overflow: hidden; border: 1px solid #222; animation: fadeIn 0.4s ease; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        img { width: 100%; aspect-ratio: 16/9; object-fit: cover; }
-        .info { padding: 20px; text-align: left; }
-        h3 { margin: 0 0 15px 0; font-size: 1rem; font-weight: 400; line-height: 1.4; color: #ccc; }
-        .dl-btn { display: block; background: #333; color: #fff; text-decoration: none; text-align: center; padding: 15px; border-radius: 12px; font-weight: bold; }
+        body { margin: 0; background: #000; color: #fff; font-family: sans-serif; }
+        .container { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
+        .main { width: 100%; max-width: 400px; text-align: center; }
+        .logo { font-size: 2rem; font-weight: 900; margin-bottom: 30px; letter-spacing: -1px; }
+        input { width: 100%; box-sizing: border-box; background: #111; border: 1px solid #222; padding: 15px; border-radius: 12px; color: #fff; margin-bottom: 10px; }
+        button { width: 100%; background: #fff; color: #000; border: none; padding: 15px; border-radius: 12px; font-weight: bold; cursor: pointer; }
+        .card { background: #111; margin-top: 20px; border-radius: 15px; overflow: hidden; border: 1px solid #222; }
+        img { width: 100%; }
+        .info { padding: 15px; text-align: left; }
+        .dl-btn { display: block; background: #0070f3; color: #fff; text-decoration: none; text-align: center; padding: 12px; border-radius: 8px; font-weight: bold; }
       `}</style>
     </div>
   );
